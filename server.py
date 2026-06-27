@@ -886,4 +886,6 @@ if __name__ == '__main__':
     print("  http://localhost:5050")
     print("  Нажми Ctrl+C для остановки")
     print("=" * 50)
-    app.run(host='127.0.0.1', port=5050, debug=False)
+    import os
+port = int(os.environ.get('PORT', 5050))
+app.run(host='0.0.0.0', port=port)

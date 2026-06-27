@@ -5,3 +5,4 @@ ephem
 pytz
 requests
 geopy
+pyswisseph

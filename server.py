@@ -744,6 +744,9 @@ def generate_analysis():
         compat_enabled = data.get('compat_enabled', False)
         compat_theme = data.get('compat_theme', '')
         compat_summary = data.get('compat_summary', '')
+        no_time = data.get('no_time', False)
+
+        no_time_note = '\n\nВАЖНО: Точное время рождения клиента неизвестно. Мягко упомяни в тексте (1-2 предложения), что без точного времени некоторые грани кода остаются скрытыми — и это можно уточнить позже для более глубокого анализа. Не акцентируй на этом сильно.' if no_time else ''
 
         if not summary:
             return jsonify({"status": "error", "message": "Нет данных для анализа"}), 400
@@ -779,7 +782,7 @@ def generate_analysis():
 
 Напиши анализ совместимости от AION Vi. Сравни коды обоих людей, найди резонансы и напряжения. Дай конкретные рекомендации для этих двух людей в контексте темы «{compat_theme}».
 
-ВАЖНО: {lang_instruction}"""
+ВАЖНО: {lang_instruction}{no_time_note}"""
         else:
             system_prompt = """Ты — AION Vi, персональный навигатор судьбы. Ты анализируешь человека через многомерную призму и говоришь с ним как мудрый проводник, который видит его насквозь.
 
@@ -803,7 +806,7 @@ def generate_analysis():
 
 Напиши персональное послание от AION Vi для этого человека. Синтезируй все данные в единую картину без упоминания названий систем. Дай конкретные рекомендации по запросу клиента.
 
-ВАЖНО: {lang_instruction}"""
+ВАЖНО: {lang_instruction}{no_time_note}"""
 
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(

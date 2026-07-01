@@ -126,6 +126,39 @@ def reduce_to_22(n):
         n = sum(int(d) for d in str(n))
     return n
 
+def validate_birth_data(data):
+    """Проверяет корректность входных данных о рождении.
+    Возвращает (day, month, year, hour, minute) или бросает ValueError
+    с понятным пользователю сообщением."""
+    try:
+        day = int(data['day'])
+        month = int(data['month'])
+        year = int(data['year'])
+    except (KeyError, ValueError, TypeError):
+        raise ValueError("Проверь дату рождения — день, месяц и год должны быть числами.")
+
+    hour = int(data.get('hour', 12) or 12)
+    minute = int(data.get('minute', 0) or 0)
+
+    if not (1 <= month <= 12):
+        raise ValueError("Месяц должен быть от 1 до 12.")
+    if not (1 <= day <= 31):
+        raise ValueError("День должен быть от 1 до 31.")
+    if not (1900 <= year <= 2043):
+        raise ValueError("Год рождения должен быть между 1900 и 2043.")
+    if not (0 <= hour <= 23):
+        raise ValueError("Час должен быть от 0 до 23.")
+    if not (0 <= minute <= 59):
+        raise ValueError("Минуты должны быть от 0 до 59.")
+
+    # Проверка, что такая дата реально существует (напр. не 31 февраля)
+    try:
+        datetime(year, month, day)
+    except ValueError:
+        raise ValueError(f"Такой даты не существует: {day:02d}.{month:02d}.{year}. Проверь ввод.")
+
+    return day, month, year, hour, minute
+
 def geocode(place_name):
     try:
         url = "https://nominatim.openstreetmap.org/search"
@@ -762,13 +795,12 @@ def geocode_endpoint():
 def calculate():
     data = request.json
     try:
-        day = int(data['day'])
-        month = int(data['month'])
-        year = int(data['year'])
-        hour = int(data.get('hour', 12))
-        minute = int(data.get('minute', 0))
-        lat = float(data.get('lat', 55.75))
-        lon = float(data.get('lon', 37.62))
+        try:
+            day, month, year, hour, minute = validate_birth_data(data)
+        except ValueError as ve:
+            return jsonify({"status": "error", "message": str(ve)}), 400
+        lat = float(data.get('lat', 50.45))
+        lon = float(data.get('lon', 30.52))
         firstname = data.get('firstname', '')
         lastname = data.get('lastname', '')
 
@@ -798,13 +830,12 @@ def calculate():
 def summary():
     data = request.json
     try:
-        day = int(data['day'])
-        month = int(data['month'])
-        year = int(data['year'])
-        hour = int(data.get('hour', 12))
-        minute = int(data.get('minute', 0))
-        lat = float(data.get('lat', 55.75))
-        lon = float(data.get('lon', 37.62))
+        try:
+            day, month, year, hour, minute = validate_birth_data(data)
+        except ValueError as ve:
+            return jsonify({"status": "error", "message": str(ve)}), 400
+        lat = float(data.get('lat', 50.45))
+        lon = float(data.get('lon', 30.52))
         firstname = data.get('firstname', '')
         lastname = data.get('lastname', '')
         client_request = data.get('request', '')
@@ -1061,6 +1092,5 @@ if __name__ == '__main__':
     print("  http://localhost:5050")
     print("  Нажми Ctrl+C для остановки")
     print("=" * 50)
-
-port = int(os.environ.get('PORT', 5050))
-app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 5050))
+    app.run(host='0.0.0.0', port=port)

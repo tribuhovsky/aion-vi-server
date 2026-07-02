@@ -17,6 +17,55 @@ import os
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
+# ── Firebase Admin — "касса" анализов на сервере ──
+import base64
+import json as _json
+
+firebase_db_available = False
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db as fb_db
+
+    _key_b64 = os.environ.get('FIREBASE_KEY_B64', '')
+    if _key_b64:
+        _key_json = _json.loads(base64.b64decode(_key_b64))
+        _cred = credentials.Certificate(_key_json)
+        firebase_admin.initialize_app(_cred, {
+            'databaseURL': 'https://aion-vi-default-rtdb.europe-west1.firebasedatabase.app'
+        })
+        firebase_db_available = True
+        print("✅ Firebase Admin подключён — касса на сервере активна")
+    else:
+        print("⚠️ FIREBASE_KEY_B64 не задан — касса работает в старом режиме (небезопасно)")
+except Exception as e:
+    print(f"⚠️ Firebase Admin не подключился: {e}")
+
+def email_to_key(email):
+    """Тот же формат ключа, что и во фронтенде (index.html emailToKey)."""
+    return email.replace('.', '_').replace('@', '__at__')
+
+def get_analyses_left(email):
+    """Возвращает остаток анализов пользователя или None, если не найден/база недоступна."""
+    if not firebase_db_available or not email:
+        return None
+    try:
+        key = email_to_key(email)
+        val = fb_db.reference(f'users/{key}/analysesLeft').get()
+        return val if isinstance(val, (int, float)) else None
+    except Exception:
+        return None
+
+def decrement_analysis(email):
+    """Списывает 1 анализ атомарно (безопасно даже при параллельных запросах)."""
+    if not firebase_db_available or not email:
+        return
+    try:
+        key = email_to_key(email)
+        ref = fb_db.reference(f'users/{key}/analysesLeft')
+        ref.transaction(lambda current: max(0, (current or 0) - 1))
+    except Exception as e:
+        print(f"⚠️ Не удалось списать анализ: {e}")
+
 app = Flask(__name__)
 CORS(app)
 
@@ -988,6 +1037,18 @@ def generate_analysis():
         if not summary:
             return jsonify({"status": "error", "message": "Нет данных для анализа"}), 400
 
+        # ── Касса на сервере: проверяем остаток ДО вызова Claude API ──
+        # (без этого пользователь мог бы подделать счётчик в браузере
+        # и генерировать анализы бесплатно за наш счёт)
+        email = data.get('email', '')
+        if firebase_db_available and email:
+            left = get_analyses_left(email)
+            if left is not None and left <= 0:
+                return jsonify({
+                    "status": "error",
+                    "message": "Анализы на этом пакете закончились. Продолжи с новым пакетом."
+                }), 403
+
         api_key = ANTHROPIC_API_KEY
         if not api_key:
             return jsonify({"status": "error", "message": "API ключ не установлен"}), 400
@@ -1073,10 +1134,18 @@ def generate_analysis():
         )
 
         analysis_text = message.content[0].text
+
+        # Списываем анализ только при успехе — неудачная генерация не в счёт
+        new_left = None
+        if firebase_db_available and email:
+            decrement_analysis(email)
+            new_left = get_analyses_left(email)
+
         return jsonify({
             "status": "ok",
             "analysis": analysis_text,
-            "tokens_used": message.usage.input_tokens + message.usage.output_tokens
+            "tokens_used": message.usage.input_tokens + message.usage.output_tokens,
+            "analyses_left": new_left
         })
 
     except anthropic.AuthenticationError:
